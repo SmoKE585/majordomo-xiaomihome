@@ -3,6 +3,48 @@
 
     const labels = {online: 'Онлайн', offline: 'Офлайн', unknown: 'Нет данных'};
 
+    const post = async (root, op, data = {}) => {
+        const body = new URLSearchParams(Object.assign({op, _token: root.dataset.mdCsrf || '', _md_csrf: root.dataset.mdCsrf || ''}, data));
+        const response = await fetch(root.dataset.mdAjaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest'},
+            body
+        });
+        let payload;
+        try {
+            payload = await response.json();
+        } catch (error) {
+            throw new Error('Сервер вернул не JSON: ' + response.status);
+        }
+        if (!payload || payload.ok !== true) {
+            throw new Error((payload && payload.error) || ('Ошибка запроса: ' + response.status));
+        }
+        return payload;
+    };
+
+    const toast = (type, title, text) => {
+        if (window.MDJUIToast) window.MDJUIToast.show({type, title, text});
+    };
+
+    const initRefresh = page => {
+        page.addEventListener('submit', async event => {
+            const form = event.target.closest('form[data-md-refresh-device]');
+            if (!form) return;
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            if (button) button.disabled = true;
+            try {
+                const payload = await post(page, 'refresh', {device_id: form.dataset.mdRefreshDevice});
+                const message = payload.data && payload.data.message ? payload.data.message : 'Команда поставлена в очередь.';
+                toast('success', 'Запрос отправлен', message);
+            } catch (error) {
+                toast('danger', 'Не удалось обновить', error.message);
+            } finally {
+                if (button) button.disabled = false;
+            }
+        });
+    };
     const initImages = page => {
         page.querySelectorAll('[data-md-xiaomihome-photo]').forEach(img => {
             const wrap = img.closest('[data-md-xiaomihome-image]');
@@ -105,6 +147,7 @@
             page.dataset.mdXiaomihomeReady = '1';
             initImages(page);
             initLiveList(page);
+            initRefresh(page);
         });
     };
 

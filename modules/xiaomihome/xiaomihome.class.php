@@ -625,6 +625,18 @@ class xiaomihome extends module
         header('Content-Type: application/json; charset=utf-8');
         try {
             $op = (string)($_GET['op'] ?? $_POST['op'] ?? '');
+            if ($op === 'refresh') {
+                $id = (int)($_POST['device_id'] ?? $_GET['device_id'] ?? 0);
+                $device = $this->repo()->device($id);
+                if (!$device) throw new InvalidArgumentException('Устройство не найдено.');
+                $ip = (string)$device['GATE_IP'];
+                if ($ip === '') throw new InvalidArgumentException('Шлюз ещё не сообщил свой IP.');
+                $this->repo()->addQueue($ip, json_encode(array('cmd' => 'read', 'sid' => (string)$device['SID']), JSON_UNESCAPED_UNICODE));
+                echo json_encode(array('ok' => true, 'data' => array(
+                    'message' => 'Запрос отправлен. Шлюз пришлёт текущие значения.',
+                )), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                exit;
+            }
             if ($op !== 'rows') throw new InvalidArgumentException('Неизвестная операция.');
             $items = array();
             foreach ($this->repo()->liveRows(200) as $device) {

@@ -88,7 +88,7 @@ foreach ($commands as $command) {
     <?php $card('Диагностика', static function () use ($device, $hidden, $queue, $technical, $e, $id, $url, $state): void { ?>
         <div class="md-xiaomihome-tools">
             <div class="md-xiaomihome-tool-row">
-                <form method="post" class="md-xiaomihome-inline-form">
+                <form method="post" action="<?= $e($url('', (int)$device['ID'], $tab === 'bind' ? 'data' : $tab)) ?>" class="md-xiaomihome-inline-form" data-md-refresh-device="<?= (int)$device['ID'] ?>">
                     <?php $hidden(array('operation' => 'refresh_device', 'device_id' => $device['ID'], 'return_url' => $url('', (int)$device['ID'], $tab === 'bind' ? 'data' : $tab))); ?>
                     <?= MDJUI::button('Запросить состояние', array('type' => 'submit', 'variant' => 'secondary', 'size' => 'sm', 'icon' => 'refresh')) ?>
                 </form>

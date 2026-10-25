@@ -119,7 +119,7 @@ $ageText = static function (array $status): string {
                         <td><span class="md-table__signal" data-md-role="updated"><?= $e($row['UPDATED'] ?: '—') ?></span></td>
                         <td>
                             <div class="md-table__actions">
-                                <form method="post" class="md-xiaomihome-inline-form">
+                                <form method="post" action="<?= $e($listReturn) ?>" class="md-xiaomihome-inline-form" data-md-refresh-device="<?= (int)$row['ID'] ?>">
                                     <?php $hidden(array('operation' => 'refresh_device', 'device_id' => $row['ID'], 'return_url' => $listReturn)); ?>
                                     <?= MDJUI::button('', array('type' => 'submit', 'variant' => 'ghost', 'size' => 'sm', 'icon' => 'refresh', 'attrs' => array('title' => 'Запросить состояние', 'aria-label' => 'Запросить состояние ' . $row['TITLE']))) ?>
                                 </form>

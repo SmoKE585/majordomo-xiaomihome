@@ -79,7 +79,7 @@ if ($view === 'settings') {
                 <?= MDJUI::button('Как подключить', array('href' => $url('help'), 'variant' => 'ghost', 'icon' => 'help-circle')) ?>
             <?php elseif ($view === 'edit_xidevices' && $device): ?>
                 <?= MDJUI::button('К устройствам', array('href' => $url('list'), 'variant' => 'secondary', 'icon' => 'arrow-left')) ?>
-                <form method="post" class="md-xiaomihome-inline-form">
+                <form method="post" action="<?= $e($url('', (int)$device['ID'], $tab === 'bind' ? 'data' : $tab)) ?>" class="md-xiaomihome-inline-form" data-md-refresh-device="<?= (int)$device['ID'] ?>">
                     <?php $hidden(array('operation' => 'refresh_device', 'device_id' => $device['ID'], 'return_url' => $url('', (int)$device['ID'], $tab === 'bind' ? 'data' : $tab))); ?>
                     <?= MDJUI::button('Опросить', array('type' => 'submit', 'icon' => 'refresh')) ?>
                 </form>
