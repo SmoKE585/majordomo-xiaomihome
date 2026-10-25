@@ -129,7 +129,9 @@ final class XiaomiHomeRepository
     {
         $device = $this->device($id);
         if (!$device) return;
-        if ((string)$device['GATE_IP'] !== '') {
+        // Очередь принадлежит шлюзу: при удалении суб-устройства её не трогаем,
+        // иначе пропадут команды других устройств за тем же шлюзом.
+        if (XiaomiHomeCatalog::isGateway((string)$device['TYPE']) && (string)$device['GATE_IP'] !== '') {
             $this->db->requireExec('DELETE FROM xiqueue WHERE IP=' . $this->quote((string)$device['GATE_IP']));
         }
         $this->db->requireExec('DELETE FROM xicommands WHERE DEVICE_ID=' . $id);
