@@ -263,7 +263,12 @@ class xiaomihome extends module
             'csrf' => $csrf,
         );
 
-        $this->result = $this->renderTemplate('xiaomihome.php', $vars);
+        try {
+            $this->result = $this->renderTemplate('xiaomihome.php', $vars);
+        } catch (Throwable $failure) {
+            DebMes('xiaomihome: page render failed: ' . $failure->getMessage(), 'xiaomihome', 'error');
+            $this->result = MDJUI::alert('danger', 'Ошибка страницы модуля', $failure->getMessage());
+        }
     }
 
     private function resolveView(): string
@@ -304,12 +309,19 @@ class xiaomihome extends module
 
     private function renderTemplate(string $template, array $vars): string
     {
-        $file = ROOT . 'templates/xiaomihome/' . $template;
+        $file = ROOT . 'templates/' . $this->name . '/' . $template;
         if (!is_file($file)) return MDJUI::alert('danger', 'Шаблон не найден', 'Ожидался файл ' . $file . '.');
         extract($vars, EXTR_SKIP);
+        $level = ob_get_level();
         ob_start();
-        require $file;
-        return (string)ob_get_clean();
+        try {
+            require $file;
+            return (string)ob_get_clean();
+        } catch (Throwable $failure) {
+            // Ошибка в шаблоне не должна оставлять «сырой» HTML без оболочки панели.
+            while (ob_get_level() > $level) ob_end_clean();
+            throw $failure;
+        }
     }
 
     private function renderLinkedObject(array $binding): string
