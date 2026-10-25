@@ -89,7 +89,7 @@ foreach ($commands as $command) {
         <div class="md-xiaomihome-tools">
             <div class="md-xiaomihome-tool-row">
                 <form method="post" class="md-xiaomihome-inline-form">
-                    <?php $hidden(array('operation' => 'refresh_device', 'device_id' => $device['ID'])); ?>
+                    <?php $hidden(array('operation' => 'refresh_device', 'device_id' => $device['ID'], 'return_url' => $url('', (int)$device['ID'], $tab === 'bind' ? 'data' : $tab))); ?>
                     <?= MDJUI::button('Запросить состояние', array('type' => 'submit', 'variant' => 'secondary', 'size' => 'sm', 'icon' => 'refresh')) ?>
                 </form>
                 <?php if ((string)$device['GATE_IP'] !== ''): ?>

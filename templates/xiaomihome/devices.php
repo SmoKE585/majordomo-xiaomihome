@@ -5,6 +5,14 @@ if (!isset($devices, $stats, $url)) {
     return;
 }
 $unit = static fn($n, $one, $few, $many) => MDJUI::plural((int)$n, $one, $few, $many);
+$listReturn = $url('list');
+$listQuery = http_build_query(array_filter(array(
+    'q' => $search,
+    'type' => $typeFilter,
+    'sort' => $sort !== 'updated' ? $sort : '',
+    'page' => $page > 1 ? $page : '',
+), static fn($value) => $value !== '' && $value !== null));
+if ($listQuery !== '') $listReturn .= '?' . $listQuery;
 $ageText = static function (array $status): string {
     if ($status['age'] === null) return 'ещё не отвечало';
     if ($status['age'] < 60) return $status['age'] . ' с назад';
@@ -112,7 +120,7 @@ $ageText = static function (array $status): string {
                         <td>
                             <div class="md-table__actions">
                                 <form method="post" class="md-xiaomihome-inline-form">
-                                    <?php $hidden(array('operation' => 'refresh_device', 'device_id' => $row['ID'])); ?>
+                                    <?php $hidden(array('operation' => 'refresh_device', 'device_id' => $row['ID'], 'return_url' => $listReturn)); ?>
                                     <?= MDJUI::button('', array('type' => 'submit', 'variant' => 'ghost', 'size' => 'sm', 'icon' => 'refresh', 'attrs' => array('title' => 'Запросить состояние', 'aria-label' => 'Запросить состояние ' . $row['TITLE']))) ?>
                                 </form>
                                 <?= MDJUI::button('', array('href' => $url('', (int)$row['ID']), 'variant' => 'ghost', 'size' => 'sm', 'icon' => 'arrow-right', 'attrs' => array('title' => 'Открыть устройство', 'aria-label' => 'Открыть ' . $row['TITLE']))) ?>

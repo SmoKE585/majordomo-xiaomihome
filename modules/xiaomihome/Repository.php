@@ -37,7 +37,7 @@ final class XiaomiHomeRepository
 
     public function quoteLike(string $value): string
     {
-        $value = strtr($value, array('=' => '==', '%' => '=%', '_' => '=_'));
+        // escapeLike уже экранирует % и _ обратным слешем для LIKE.
         return "'" . $this->db->escapeLike($value) . "'";
     }
 
@@ -45,10 +45,10 @@ final class XiaomiHomeRepository
     {
         $search = trim($search);
         if ($search === '') return '1';
-        $like = $this->quoteLike('%' . $search . '%');
-        return '(d.TITLE LIKE ' . $like . " ESCAPE '='"
-            . ' OR d.TYPE LIKE ' . $like . " ESCAPE '='"
-            . ' OR d.SID LIKE ' . $like . " ESCAPE '=')";
+        $like = "'%" . $this->db->escapeLike($search) . "%'";
+        return '(d.TITLE LIKE ' . $like . ""
+            . ' OR d.TYPE LIKE ' . $like . ""
+            . ' OR d.SID LIKE ' . $like . ")";
     }
 
     public function devices(string $search, string $type, string $sort, int $limit, int $offset): array

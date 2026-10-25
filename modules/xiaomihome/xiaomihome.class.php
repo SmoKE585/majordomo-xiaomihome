@@ -411,10 +411,17 @@ class xiaomihome extends module
         return array(
             'title' => 'Запрос отправлен',
             'text' => 'Шлюз получит команду чтения и пришлёт текущие значения. Ответ появится в свойствах.',
-            'url' => $this->deviceUrl($id),
+            'url' => $this->returnUrl($this->deviceUrl($id)),
         );
     }
 
+    /** Возврат на страницу, с которой нажали «Опросить», если это наш модуль. */
+    private function returnUrl(string $fallback): string
+    {
+        $value = $this->posted('return_url');
+        if ($value === '' || preg_match('/[\r\n]/', $value)) return $fallback;
+        return str_starts_with($value, ROOTHTML . 'panel/xiaomihome') ? $value : $fallback;
+    }
     private function clearQueue(): array
     {
         $ip = trim($this->posted('gate_ip'));
