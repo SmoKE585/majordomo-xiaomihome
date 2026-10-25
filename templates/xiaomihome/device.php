@@ -39,7 +39,7 @@ foreach ($commands as $command) {
     </div>
 
     <div class="md-xiaomihome-two-col">
-        <?php $card('Устройство', static function () use ($deviceImage, $type, $device, $state, $id, $e, $url, $battery, $batteryType): void { ?>
+        <?php $card('Устройство', static function () use ($deviceImage, $type, $device, $state, $id, $e, $url, $battery, $batteryType, $isGateway, $gateKeySet): void { ?>
             <div class="md-xiaomihome-device-head">
                 <?php $deviceImage($type, true); ?>
                 <div class="md-xiaomihome-device-meta">
@@ -85,7 +85,7 @@ foreach ($commands as $command) {
         <?php }, array('icon' => 'settings')); ?>
     </div>
 
-    <?php $card('Диагностика', static function () use ($device, $hidden, $queue, $technical, $e, $id, $url, $state): void { ?>
+    <?php $card('Диагностика', static function () use ($device, $hidden, $queue, $technical, $e, $id, $url, $state, $tab): void { ?>
         <div class="md-xiaomihome-tools">
             <div class="md-xiaomihome-tool-row">
                 <form method="post" action="<?= $e($url('', (int)$device['ID'], $tab === 'bind' ? 'data' : $tab)) ?>" class="md-xiaomihome-inline-form" data-md-refresh-device="<?= (int)$device['ID'] ?>">

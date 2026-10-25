@@ -11,7 +11,8 @@ if (!isset($view, $csrf) || !class_exists('MDJUI', false)) {
 }
 
 $e = static fn($value) => MDJUI::e((string)($value ?? ''));
-$url = static function (string $page = '', int $id = 0, string $tab = '') use ($view): string {
+$url = static function (string $page = '', int $id = 0, ?string $tab = '') use ($view): string {
+    $tab = (string)($tab ?? '');
     if ($page === 'list') return ROOTHTML . 'panel/xiaomihome.html';
     if ($page !== '') return ROOTHTML . 'panel/xiaomihome/0/' . $page . '.html';
     $base = ROOTHTML . 'panel/xiaomihome/' . max(0, $id) . '.html';
