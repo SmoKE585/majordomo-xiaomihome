@@ -8,6 +8,9 @@
  *
  * 2026-10-25 — код вынесен из класса модуля, константы протокола перенесены
  * в XiaomiHomeConst, добавлены защиты от неполных сообщений.
+ * 2026-10-29 — команда самому шлюзу (rgb, brightness, ringtone) снова получает
+ * data и подпись: тип шлюза берётся из строки команды, а не только из
+ * найденной по IP строки шлюза; ошибки отправки возвращаются вызывающему.
  */
 trait XiaomiHomeEngine
 {
@@ -615,10 +618,19 @@ trait XiaomiHomeEngine
             DebMes("Sending message ($message) to $ip", 'xiaomi');
         }
 
-        @socket_sendto($sock, $message, strlen($message), 0, $ip, XiaomiHomeConst::PORT);
+        // Результат отправки важен: раньше он игнорировался, и цикл удалял
+        // команду из очереди даже тогда, когда UDP-пакет не ушёл.
+        $sent = @socket_sendto($sock, $message, strlen($message), 0, $ip, XiaomiHomeConst::PORT);
+        return $sent !== false;
     }
     function propertySetHandle($object, $property, $value)
     {
+        // В alpha-ядре обработчик свойства вызывается фоновым воркером
+        // cycle_core на свежем экземпляре модуля, где $this->config ещё пуст.
+        // Без этого молчат предупреждения о ключе шлюза, а команда при этом
+        // просто не ставится в очередь.
+        $this->getConfig();
+
         $properties = SQLSelect("SELECT ID FROM xicommands WHERE xicommands.LINKED_OBJECT = '" . DBSafe($object) . "' AND xicommands.LINKED_PROPERTY = '" . DBSafe($property) . "'");
 
         $total = count($properties);
@@ -627,25 +639,35 @@ trait XiaomiHomeEngine
             for ($i = 0; $i < $total; $i++) {
 
                 $command = SQLSelectOne("SELECT xicommands.*, xidevices.TYPE, xidevices.TOKEN, xidevices.GATE_IP, xidevices.SID, xidevices.GATE_KEY FROM xicommands LEFT JOIN xidevices ON xicommands.DEVICE_ID=xidevices.ID WHERE xicommands.ID=" . (int)$properties[$i]['ID']);
+                if (empty($command['ID'])) {
+                    // Строку свойства успели удалить между запросами.
+                    continue;
+                }
 
                 $ip = (string)$command['GATE_IP'];
                 $token = (string)$command['TOKEN'];
                 $key = (string)$command['GATE_KEY'];
+                // Тип шлюза, которому принадлежит команда. Для суб-устройства
+                // его даёт строка шлюза с тем же IP, для самого шлюза — строка
+                // команды. Раньше здесь стояло условие «найти шлюз, только если
+                // это не шлюз», и запись для самого шлюза (rgb, brightness,
+                // ringtone) уходила без data и без подписи — шлюз её игнорировал.
+                $gatewayType = (string)$command['TYPE'];
                 $gate = array();
 
-                if ($command['TYPE'] != 'gateway' && $command['TYPE'] != 'acpartner.v3') {
-                    $gate = SQLSelectOne("SELECT * FROM xidevices WHERE (TYPE='gateway' OR TYPE='acpartner.v3') AND GATE_IP='" . $ip . "'");
-                    if ($gate['ID']) {
+                if ($gatewayType !== 'gateway' && $gatewayType !== 'acpartner.v3') {
+                    $gate = SQLSelectOne("SELECT * FROM xidevices WHERE (TYPE='gateway' OR TYPE='acpartner.v3') AND GATE_IP='" . DBSafe($ip) . "'");
+                    if (!empty($gate['ID'])) {
+                        $gatewayType = (string)$gate['TYPE'];
                         if (!empty($gate['GATE_KEY'])) {
                             $key = (string)$gate['GATE_KEY'];
                         } else {
-                            if (!empty($this->config['API_LOG_DEBMES'])) DebMes('Cannot find gateway key for ' . $ip, 'xiaomi', 'warning');
+                            DebMes('xiaomihome: gateway ' . $ip . ' has no key, command cannot be signed', 'xiaomi', 'warning');
                         }
                         $token = (string)$gate['TOKEN'];
+                    } else {
+                        DebMes('xiaomihome: gateway row for ' . $ip . ' not found, command cannot be signed', 'xiaomi', 'warning');
                     }
-                } else {
-                    $token = $command['TOKEN'];
-                    $key = $command['GATE_KEY'];
                 }
 
                 $data = array();
@@ -758,15 +780,21 @@ trait XiaomiHomeEngine
                 if (!empty($data['cmd']) && $key !== '' && strlen($key) === 16) {
 
                     if ($data['cmd'] == 'write') {
-                        if (!empty($gate['TYPE']) && $gate['TYPE'] == 'gateway') {
+                        if ($gatewayType === 'gateway') {
                             $cmd_data['key'] = $this->makeSignature($token, $key);
                             $data['data'] = json_encode($cmd_data);
-                        } else if ($gate['TYPE'] == 'acpartner.v3') {
+                        } else if ($gatewayType === 'acpartner.v3') {
                             $data['key'] = $this->makeSignature($token, $key);
                             $data['params'] = array();
-                            foreach ($cmd_data as $key => $val) {
-                                $data['params'][] = [$key => $val];
+                            foreach ($cmd_data as $name => $val) {
+                                $data['params'][] = array($name => $val);
                             }
+                        } else {
+                            // Ни своей строки шлюза, ни найденного по IP шлюза:
+                            // подписывать нечем, а неподписанную запись шлюз
+                            // молча игнорирует.
+                            DebMes('xiaomihome: cannot determine gateway type for ' . $ip . ', command skipped', 'xiaomi', 'warning');
+                            continue;
                         }
                     }
 
@@ -774,7 +802,13 @@ trait XiaomiHomeEngine
                     $que_rec['DATA'] = json_encode($data);
                     $que_rec['IP'] = $ip;
                     $que_rec['ADDED'] = date('Y-m-d H:i:s');
-                    $que_rec['ID'] = SQLInsert('xiqueue', $que_rec);
+                    $que_id = (int)SQLInsert('xiqueue', $que_rec);
+                    if (!$que_id) {
+                        // Без строки в очереди команда не уйдёт, а пользователь
+                        // увидит только изменившееся свойство.
+                        DebMes('xiaomihome: cannot queue command for ' . $ip . ': ' . $que_rec['DATA'], 'xiaomi', 'error');
+                        continue;
+                    }
 
                     if ($command['TITLE'] == 'command' || $command['TITLE'] == 'ringtone') {
                         SQLExec("UPDATE xicommands SET VALUE='" . DBSafe($value) . "', UPDATED='" . date('Y-m-d H:i:s') . "' WHERE ID=" . (int)$properties[$i]['ID']);

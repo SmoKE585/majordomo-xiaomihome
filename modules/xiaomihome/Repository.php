@@ -10,6 +10,8 @@ use MajorDoMo\Core\Core;
  * и пишет через Core::database(), имена таблиц и полей не собираются из ввода.
  *
  * 2026-10-25 — слой добавлен при переводе модуля на новый интерфейс.
+ * 2026-10-29 — готовность строк очереди проверяется в PHP, а не через NOW():
+ * в цикле alpha-ядра часовой пояс MySQL-сессии может не совпадать с PHP.
  */
 final class XiaomiHomeRepository
 {
@@ -203,7 +205,20 @@ final class XiaomiHomeRepository
 
     public function dueQueue(int $limit = 50): array
     {
-        return $this->db->select('SELECT * FROM xiqueue WHERE ADDED<=NOW() ORDER BY ID LIMIT ' . max(1, $limit));
+        // Сравниваем время в PHP, а не через NOW(): в alpha-ядре цикл
+        // подключается к БД до чтения настроек, поэтому часовой пояс сессии
+        // MySQL может остаться серверным. Тогда ADDED (время PHP) оказывается
+        // «в будущем» и команды висят в очереди часами, хотя цикл живой.
+        $limit = max(1, $limit);
+        $rows = $this->db->select('SELECT * FROM xiqueue ORDER BY ID LIMIT ' . ($limit * 5));
+        $now = time();
+        $due = array();
+        foreach ($rows as $row) {
+            $added = strtotime((string)($row['ADDED'] ?? ''));
+            if ($added === false || $added <= $now) $due[] = $row;
+            if (count($due) >= $limit) break;
+        }
+        return $due;
     }
 
     public function addQueue(string $ip, string $data, int $shift = 0): int

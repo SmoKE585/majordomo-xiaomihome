@@ -17,6 +17,8 @@ require_once __DIR__ . '/Engine.php';
  * 2026-10-25 — новый интерфейс на MDJUI, чистые URL, настройки с проверкой,
  * цикл без HTTP-перезапуска, типовая доступность устройств, живые обновления
  * списка и документация. Таблицы и привязки прежней версии сохраняются.
+ * 2026-10-29 — неудачная отправка команды больше не удаляет строку очереди:
+ * две повторные попытки, затем удаление с записью в журнал ошибок.
  */
 class xiaomihome extends module
 {
@@ -27,6 +29,8 @@ class xiaomihome extends module
     private $roundModeCache = null;
     private $socket = null;
     private $lastData = 0;
+    /** Неудачные попытки отправки по ID строки xiqueue (живут в памяти цикла). */
+    private $queueAttempts = array();
 
     public function __construct()
     {
@@ -742,15 +746,38 @@ class xiaomihome extends module
     {
         $settings = $this->settings();
         foreach ($this->repo()->dueQueue(50) as $row) {
+            $id = (int)$row['ID'];
             $ip = trim((string)$row['IP']);
             if ($ip === '' || $this->socket === null) {
-                $this->repo()->deleteQueue((int)$row['ID']);
+                $this->failQueueRow($id, 'no destination or socket');
                 continue;
             }
             if ($settings['log_cycle']) echo date('H:i:s') . ' queue -> ' . $ip . ': ' . $row['DATA'] . PHP_EOL;
-            $this->sendMessage((string)$row['DATA'], $ip, $this->socket);
-            $this->repo()->deleteQueue((int)$row['ID']);
+            if ($this->sendMessage((string)$row['DATA'], $ip, $this->socket)) {
+                unset($this->queueAttempts[$id]);
+                $this->repo()->deleteQueue($id);
+                continue;
+            }
+            $this->failQueueRow($id, 'socket_sendto failed for ' . $ip);
         }
+    }
+
+    /**
+     * Неудачная отправка: строку не удаляем сразу, чтобы короткий сбой сети
+     * не терял команду. После трёх попыток удаляем и пишем ошибку — иначе
+     * очередь росла бы бесконечно.
+     */
+    private function failQueueRow(int $id, string $reason): void
+    {
+        $attempts = (int)($this->queueAttempts[$id] ?? 0) + 1;
+        $this->queueAttempts[$id] = $attempts;
+        if ($attempts < 3) {
+            DebMes('xiaomihome: queue #' . $id . ' not sent (' . $reason . '), retry ' . $attempts . '/3', 'xiaomi', 'warning');
+            return;
+        }
+        DebMes('xiaomihome: queue #' . $id . ' dropped after 3 attempts (' . $reason . ')', 'xiaomi', 'error');
+        unset($this->queueAttempts[$id]);
+        $this->repo()->deleteQueue($id);
     }
 
     private function receiveMessages(): void
